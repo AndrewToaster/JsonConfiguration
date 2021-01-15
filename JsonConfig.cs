@@ -23,13 +23,14 @@ namespace JsonConfiguration
         /// </summary>
         private static readonly JsonSerializerOptions _options;
         /// <summary>
-        /// The config loaded in memory
-        /// </summary>
-        private JSON_Root _jsonConfig;
-        /// <summary>
         /// The path to the config file
         /// </summary>
         private readonly string _jsonPath;
+
+        /// <summary>
+        /// Indicates whether or not to call <see cref="Save"/> after certain functions
+        /// </summary>
+        public bool AutoFlush { get; set; }
 
         /// <summary>
         /// The config dictionary loaded from JSON
@@ -52,18 +53,19 @@ namespace JsonConfiguration
             {
                 WriteIndented = true,
                 MaxDepth = 8,
-                ReadCommentHandling = JsonCommentHandling.Skip
+                ReadCommentHandling = JsonCommentHandling.Skip,
+                PropertyNameCaseInsensitive = true
             };
         }
 
         /// <summary>
         /// Creates a new instance of <see cref="JsonConfig"/>
         /// </summary>
-        private JsonConfig(JSON_Root jsonConfig, string configFile)
+        private JsonConfig(JSON_Root jsonConfig, string configFile, bool autoFlush)
         {
-            _jsonConfig = jsonConfig;
             _jsonPath = configFile;
             Entries = jsonConfig;
+            AutoFlush = autoFlush;
         }
 
         /// <summary>
@@ -74,6 +76,16 @@ namespace JsonConfiguration
         public string GetEntry(string key)
         {
             return Entries.GetValueOrDefault(key);
+        }
+
+        /// <summary>
+        /// Returns a entry insde the config
+        /// </summary>
+        /// <param name="key">The key of the entry to use</param>
+        /// <returns>Value associated with the <paramref name="key"/>, <see langword="null"/> if it doesn't exist<returns>
+        public TEntry GetEntry<TEntry>(string key)
+        {
+            return JsonSerializer.Deserialize<TEntry>(Entries.GetValueOrDefault(key));
         }
 
         /// <summary>
@@ -94,6 +106,33 @@ namespace JsonConfiguration
         public void SetEntry(string key, string value)
         {
             Entries[key] = value;
+            TryAutoFlush();
+        }
+
+        /// <summary>
+        /// Sets a entry inside the config
+        /// </summary>
+        /// <param name="key">The key of the entry to use</param>
+        /// <param name="value">The value to set the entry to</param>
+        public void SetEntry<TEntry>(string key, TEntry value)
+        {
+            Entries[key] = JsonSerializer.Serialize(value);
+            TryAutoFlush();
+        }
+
+        /// <summary>
+        /// Retrieves an entry and modifies it with <paramref name="modFunc"/>, then sets the new value to the <paramref name="key"/>
+        /// </summary>
+        /// <typeparam name="TEntry">The type to modify</typeparam>
+        /// <param name="key">The key of the entry to modify</param>
+        /// <param name="modFunc">The action that modifies the value</param>
+        public void ModifyEntry<TEntry>(string key, Action<TEntry> modFunc)
+        {
+            TEntry entry = JsonSerializer.Deserialize<TEntry>(Entries.GetValueThrow(key));
+            modFunc(entry);
+            Entries[key] = JsonSerializer.Serialize(entry);
+
+            TryAutoFlush();
         }
 
         /// <summary>
@@ -103,7 +142,12 @@ namespace JsonConfiguration
         /// <returns>The key of the entry to use</returns>
         public bool RemoveEntry(string key)
         {
-            return Entries.Remove(key);
+            bool removed = Entries.Remove(key);
+
+            if (removed)
+                TryAutoFlush();
+
+            return removed;
         }
 
         /// <summary>
@@ -125,16 +169,30 @@ namespace JsonConfiguration
         }
 
         /// <summary>
+        /// Calls <see cref="Save"/> if <see cref="AutoFlush"/> is <see langword="true"/>, otherwise does nothing
+        /// </summary>
+        private void TryAutoFlush()
+        {
+            if (AutoFlush)
+                Save();
+        }
+
+        /// <summary>
         /// Creates a new instance of <see cref="JsonConfig"/> using a specified. If not found, creates a new config
         /// </summary>
         /// <param name="configPath">The path to the config</param>
         /// <param name="allowVersionMismatch">Whether or not to allow different config versions</param>
         /// <returns>Created wrapper</returns>
-        public static JsonConfig LoadFromFile(string configPath, bool allowVersionMismatch = false)
+        public static JsonConfig LoadFromFile(string configPath, bool autoFlush = false, bool allowVersionMismatch = false)
         {
             if (File.Exists(configPath))
             {
-                return new JsonConfig(JsonSerializer.Deserialize<JSON_Root>(File.ReadAllText(configPath), _options), configPath);
+                JSON_Root jsonConfig = JsonSerializer.Deserialize<JSON_Root>(File.ReadAllText(configPath), _options);
+
+                if (jsonConfig.ConfigVersion != VERSION && !allowVersionMismatch)
+                    throw new VersionMismatchException(VERSION, jsonConfig.ConfigVersion);
+
+                return new JsonConfig(jsonConfig, configPath, autoFlush);
             }
             else
             {
@@ -148,7 +206,7 @@ namespace JsonConfiguration
 
                     fileStream.Write(data, 0, data.Length);
 
-                    return new JsonConfig(jsonConfig, configPath);
+                    return new JsonConfig(jsonConfig, configPath, autoFlush);
                 }
             }
         }
@@ -159,7 +217,7 @@ namespace JsonConfiguration
         /// <param name="configPath">The path to the config</param>
         /// <param name="allowVersionMismatch">Whether or not to allow different config versions</param>
         /// <returns>Created wrapper</returns>
-        public static async Task<JsonConfig> LoadFromFileAsync(string configPath, bool allowVersionMismatch = false)
+        public static async Task<JsonConfig> LoadFromFileAsync(string configPath, bool autoFlush = false, bool allowVersionMismatch = false)
         {
             if (File.Exists(configPath))
             {
@@ -169,7 +227,7 @@ namespace JsonConfiguration
                 if (jsonConfig.ConfigVersion != VERSION && !allowVersionMismatch)
                     throw new VersionMismatchException(VERSION, jsonConfig.ConfigVersion);
 
-                return new JsonConfig(jsonConfig, configPath);
+                return new JsonConfig(jsonConfig, configPath, autoFlush);
             }
             else
             {
@@ -181,7 +239,7 @@ namespace JsonConfiguration
                     JSON_Root jsonConfig = JSON_Root.Default;
                     await JsonSerializer.SerializeAsync(fileStream, jsonConfig, _options);
 
-                    return new JsonConfig(jsonConfig, configPath);
+                    return new JsonConfig(jsonConfig, configPath, autoFlush);
                 }
             }
         }

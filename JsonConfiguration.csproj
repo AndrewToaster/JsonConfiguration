@@ -1,7 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
+    <Company>AndrewToasterr</Company>
+    <Authors>AndrewToasterr</Authors>
+    <Description>Allows for configuration using JSON files</Description>
+    <Copyright>Copyright (c) 2021 AndrewToaster</Copyright>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReleaseNotes>Added AutoFlushing
+Added ModifyEntry&lt;T&gt; method
+Fixed minor bugs</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/AndrewToaster/JsonConfiguration</RepositoryUrl>
+    <RepositoryType>Source</RepositoryType>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Version>1.0.3</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
 
 </Project>
